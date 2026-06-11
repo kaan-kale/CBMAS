@@ -8,16 +8,17 @@ Usage examples:
 If run without arguments, executes a small quick-start experiment for debugging.
 """
 
-from BRC_Experiment.Modularized.cli import main as cli_main
-from BRC_Experiment.Modularized.config import ExperimentConfig
-from BRC_Experiment.Modularized.experiment import Experiment
 import sys
 from pathlib import Path
 
-# Ensure project root is importable when running this file directly
+# Ensure project root is importable when running this file directly.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+from BRC_Experiment.Modularized.cli import main as cli_main
+from BRC_Experiment.Modularized.config import ExperimentConfig
+from BRC_Experiment.Modularized.experiment import Experiment
 
 
 def run_quickstart() -> None:

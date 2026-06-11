@@ -1,19 +1,21 @@
 # Core numerical and plotting
-numpy>=1.23,<2.0  # Compatible with torchvision requirement (numpy<2) and matplotlib (numpy>=1.23)
-matplotlib==3.9.2
+numpy>=1.26,<2.0
+matplotlib>=3.9,<4
 
-torch==2.4.0
-torchvision==0.19.0
-torchaudio==2.4.0
+# PyTorch stack
+# Torch 2.4.0 is not available for Python 3.12/3.13 on this platform.
+# Use a newer wheel that installs cleanly on macOS arm64 + Python 3.12.
+torch>=2.6,<3
 
-transformers==4.44.2
-datasets==2.20.0
+transformers>=4.44,<5
+datasets>=2.20,<3
 
-transformer_lens==1.15.0
-jaxtyping==0.2.33
-typeguard==2.13.3  # Required by jaxtyping 0.2.33
+transformer_lens>=1.15,<2
+jaxtyping>=0.2.33,<0.3
+typeguard>=2.13,<3
 
-pandas==2.2.2
-tqdm==4.66.4
+pandas>=2.2,<3
+tqdm>=4.66,<5
 
-pytest==8.3.2
+pytest>=8,<9
+modal>=1.5,<2

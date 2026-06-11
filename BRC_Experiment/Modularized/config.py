@@ -34,9 +34,8 @@ class ExperimentConfig:
     log_scale_both: bool = False
     
     # Dataset to use: any dataset name from data/ directory (e.g., "deference", "reassurance", "satisficing", "sycophancy")
-    dataset: str = "deference"
+    dataset: str = "reassurance"
 
     # Whether to show progress bars during execution
     show_progress: bool = True
-
 

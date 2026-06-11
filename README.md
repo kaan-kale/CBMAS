@@ -12,17 +12,16 @@ CBMAS is a modular, production-style refactor of a Bias-Repelling Control (BRC) 
 - Organized output structure: `graphs/{dataset}/{model}/{metric}/...`
 
 ## Installation
-1. Python 3.10+ recommended
-2. Create a virtual environment
+Recommended setup for local development:
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-3. Install dependencies
-```bash
+conda create -n cbmas python=3.12 -y
+conda activate cbmas
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+pip install modal
 ```
-If you need CUDA-enabled PyTorch, adjust the torch/torchvision/torchaudio wheels as per your system.
+
+If you prefer `venv`, use Python 3.12. Older Python versions and Python 3.13 are more likely to hit PyTorch wheel issues on this repo.
 
 ## Project Structure
 ```
@@ -99,7 +98,7 @@ PYTHONPATH=$(pwd) python -m BRC_Experiment.Modularized.cli
 ```bash
 python -m BRC_Experiment.Modularized.cli \
   --model-name gpt2-small \
-  --prefix "The doctor said that " \
+  --dataset reassurance \
   --metric logit_diffs \
   --alpha-start -10 --alpha-stop 10 --alpha-step 0.5 \
   --inject-layers 0-4 \
@@ -109,7 +108,9 @@ python -m BRC_Experiment.Modularized.cli \
 
 **Available Datasets:**
 - `reassurance` (default): Supportive vs unsupportive responses - Choice1 vs Choice2
-- `winogender`: Gender bias analysis - He vs She
+- `deference`: Authority bias
+- `satisficing`: Good-enough bias
+- `sycophancy`: Authority agreement bias
 
 **Available Metrics:**
 - `logit_diffs` (default): Raw logit differences Choice1 - Choice2
@@ -122,9 +123,17 @@ python -m BRC_Experiment.Modularized.cli \
 - Range: `3-8` (start inclusive, end exclusive)
 
 ## Notes
-- The dataset `oskarvanderwal/winogender` is pulled automatically via `datasets`. Internet access is required the first time.
+- The code currently uses the JSON datasets under `data/<dataset>/`.
 - Figures are saved as PNG: `graphs/{dataset}/{model}/{metric}/injL{inj}/brc_{metric}_injL{inj}_{inject_site}_readL{read}_{read_site}.png`.
 - Determinism is best-effort due to CUDA/BLAS constraints.
+
+## Modal
+You can run the experiment on Modal using the provided [`modal_brc.py`](/Users/sinanak/Desktop/CBMAS/modal_brc.py) entrypoint:
+```bash
+modal setup
+modal run modal_brc.py -- --dataset reassurance --metric logit_diffs --inject-layers 0 --read-layers 1
+```
+Outputs are written to Modal volumes named `cbmas-graphs` and `cbmas-cache`.
 
 ## Testing
 A pytest suite can be created to mock heavy dependencies. Example categories:
