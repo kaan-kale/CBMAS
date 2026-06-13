@@ -131,9 +131,50 @@ python -m BRC_Experiment.Modularized.cli \
 You can run the experiment on Modal using the provided [`modal_brc.py`](/Users/sinanak/Desktop/CBMAS/modal_brc.py) entrypoint:
 ```bash
 modal setup
-modal run modal_brc.py -- --dataset reassurance --metric logit_diffs --inject-layers 0 --read-layers 1
+modal run modal_brc.py --dataset reassurance --metric logit_diffs --inject-layers 0 --read-layers 1
 ```
 Outputs are written to Modal volumes named `cbmas-graphs` and `cbmas-cache`.
+
+## Gemma Alpha Sweep
+The Gemma diagnostic experiment is kept separate from the core CBMAS modules:
+```bash
+python -m experiments.gemma_alpha_sweep \
+  --model-name google/gemma-2-2b-it \
+  --behavior-name reassurance \
+  --source-layer 12 \
+  --read-layer 20 \
+  --alpha-values=-4,-2,-1,0,1,2,4 \
+  --max-train-prompts 40 \
+  --max-eval-prompts 30
+```
+
+To compare multiple source/read layer pairs while keeping the same behavior, prompts, alpha values, and scoring method:
+```bash
+python -m experiments.gemma_alpha_sweep \
+  --model google/gemma-2-2b-it \
+  --behavior reassurance \
+  --layer-pairs "8:16,10:20,12:24" \
+  --alpha-values=-4,-2,-1,0,1,2,4 \
+  --num-prompts 30
+```
+
+Each run writes to a unique timestamped folder:
+```text
+graphs/gemma_alpha_sweep/google_gemma-2-2b-it/reassurance/<run_id>/
+```
+
+Each layer pair gets its own subfolder such as `source_10_read_20/`, and multi-pair runs also produce comparison plots plus `combined_results.csv` in the top-level run folder.
+
+The Modal wrapper uses an L4 GPU and writes outputs to the `cbmas-gemma-alpha-sweep` volume:
+```bash
+modal run modal_gemma_alpha_sweep.py \
+  --model-name google/gemma-2-2b-it \
+  --behavior-name reassurance \
+  --layer-pairs "8:16,10:20,12:24" \
+  --num-prompts 30
+```
+
+If Gemma access is gated for your Hugging Face account, export `HF_TOKEN` before running the Modal command.
 
 ## Testing
 A pytest suite can be created to mock heavy dependencies. Example categories:
