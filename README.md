@@ -176,6 +176,40 @@ modal run modal_gemma_alpha_sweep.py \
 
 If Gemma access is gated for your Hugging Face account, export `HF_TOKEN` before running the Modal command.
 
+## Steering Artifact Capture
+To save unsteered vs steered read-layer hidden states for manual inspection:
+```bash
+python -m experiments.steering_artifacts \
+  --model google/gemma-2-2b \
+  --behavior reassurance \
+  --source-layer 8 \
+  --read-layer 16 \
+  --alpha 1 \
+  --num-prompts 5 \
+  --sae-release gemma-scope-2b-pt-res-canonical \
+  --sae-id layer_16/width_16k/canonical
+```
+
+The Modal wrapper writes these artifacts to the `cbmas-steering-artifacts` volume:
+```bash
+modal run modal_steering_artifacts.py \
+  --model-name google/gemma-2-2b \
+  --behavior-name reassurance \
+  --source-layer 8 \
+  --read-layer 16 \
+  --alpha 1 \
+  --max-eval-prompts 5 \
+  --sae-release gemma-scope-2b-pt-res-canonical \
+  --sae-id layer_16/width_16k/canonical
+```
+
+Each run creates:
+```text
+steering_runs/google_gemma-2-2b/reassurance/<run_id>/
+```
+
+with `hidden_states/`, `sae_features/`, `summaries/`, and `metadata.json`. The default artifact run uses base `google/gemma-2-2b` with a matching Gemma Scope residual SAE at read layer 16.
+
 ## Testing
 A pytest suite can be created to mock heavy dependencies. Example categories:
 - utils: seeds, device, alpha grid, layer parsing

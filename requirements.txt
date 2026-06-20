@@ -12,6 +12,7 @@ datasets>=2.20,<3
 sentencepiece>=0.2,<0.3
 
 transformer_lens>=1.15,<2
+sae-lens>=6,<7
 jaxtyping>=0.2.33,<0.3
 typeguard>=2.13,<3
 
