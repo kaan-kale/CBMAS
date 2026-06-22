@@ -65,7 +65,9 @@ def main(
     behavior_name: str = "reassurance",
     source_layer: int = 8,
     read_layer: int = 16,
+    read_layers: str = "",
     alpha: float = 1.0,
+    alpha_values: str = "-10,-7.5,-5,-2.5,0,2.5,5,7.5,10",
     max_train_prompts: int = 40,
     max_eval_prompts: int = 5,
     seed: int = 42,
@@ -97,6 +99,10 @@ def main(
     ]
     if run_id:
         argv.extend(["--run-id", run_id])
+    if read_layers:
+        argv.extend(["--read-layers", read_layers])
+    if alpha_values:
+        argv.append(f"--alpha-values={alpha_values}")
     if sae_release and sae_id:
         argv.extend(["--sae-release", sae_release, "--sae-id", sae_id])
     if not prepend_bos:

@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,6 +28,9 @@ from BRC_Experiment.Modularized.utils import configure_determinism, get_device, 
 
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "cbmas_matplotlib"))
+
+
+DEFAULT_ALPHA_VALUES = (-10.0, -7.5, -5.0, -2.5, 0.0, 2.5, 5.0, 7.5, 10.0)
 
 
 @dataclass
@@ -46,6 +49,8 @@ class SteeringArtifactConfig:
     run_id: str = ""
     sae_release: str = "gemma-scope-2b-pt-res-canonical"
     sae_id: str = "layer_16/width_16k/canonical"
+    read_layers: tuple[int, ...] = ()
+    alpha_values: tuple[float, ...] = DEFAULT_ALPHA_VALUES
 
 
 class HFCausalLM:
@@ -78,6 +83,31 @@ def _make_run_id() -> str:
 
 def _clean_model_name(model_name: str) -> str:
     return model_name.replace("/", "_").replace("\\", "_")
+
+
+def _parse_int_list(value: str | None) -> tuple[int, ...]:
+    if not value:
+        return tuple()
+    return tuple(int(part.strip()) for part in value.split(",") if part.strip())
+
+
+def _parse_float_list(value: str | None) -> tuple[float, ...]:
+    if not value:
+        return tuple()
+    return tuple(float(part.strip()) for part in value.split(",") if part.strip())
+
+
+def _default_sae_id_for_read_layer(read_layer: int) -> str:
+    return f"layer_{read_layer}/width_16k/canonical"
+
+
+def _layer_run_label(source_layer: int, read_layer: int) -> str:
+    return f"source_{source_layer}_read_{read_layer}"
+
+
+def _alpha_run_label(alpha: float) -> str:
+    label = f"{alpha:g}".replace("-", "neg").replace(".", "p")
+    return f"alpha_{label}"
 
 
 def _validate_layers(cfg: SteeringArtifactConfig, n_layers: int) -> None:
@@ -288,32 +318,20 @@ def _save_prompt_artifacts(
     return paths
 
 
-def run_artifact_capture(cfg: SteeringArtifactConfig) -> dict[str, Any]:
-    configure_determinism(cfg.seed)
-    device = get_device()
-    run_id = cfg.run_id or _make_run_id()
-    run_root = Path(cfg.out_dir) / _clean_model_name(cfg.model_name) / cfg.behavior_name / run_id
+def _capture_single_read_layer(
+    cfg: SteeringArtifactConfig,
+    model: HFCausalLM,
+    device: torch.device,
+    run_root: Path,
+    steer_vec: torch.Tensor,
+    vector_status: str,
+    vector_cache_path: str,
+    eval_prompts: list[str],
+) -> dict[str, Any]:
     summaries_dir = run_root / "summaries"
     summaries_dir.mkdir(parents=True, exist_ok=True)
 
-    model = HFCausalLM(cfg.model_name, device)
     _validate_layers(cfg, int(model.cfg.n_layers))
-
-    train_pairs = load_train_dataset(cfg.behavior_name)[: cfg.max_train_prompts]
-    eval_prompts = load_test_dataset(cfg.behavior_name)[: cfg.max_eval_prompts]
-    if not train_pairs:
-        raise ValueError(f"No training prompts found for behavior {cfg.behavior_name!r}")
-    if not eval_prompts:
-        raise ValueError(f"No eval prompts found for behavior {cfg.behavior_name!r}")
-
-    steer_vec, vector_status, vector_cache_path = _build_hf_steering_vector(
-        model=model,
-        source_layer=cfg.source_layer,
-        prompt_pairs=train_pairs,
-        prepend_bos=cfg.prepend_bos,
-        model_name=cfg.model_name,
-        behavior_name=cfg.behavior_name,
-    )
     sae, sae_status = _load_optional_sae(cfg, device)
 
     prompt_rows = []
@@ -374,7 +392,7 @@ def run_artifact_capture(cfg: SteeringArtifactConfig) -> dict[str, Any]:
     feature_summary_path.write_text(json.dumps(feature_summaries, indent=2), encoding="utf-8")
 
     metadata = {
-        "run_id": run_id,
+        "run_id": cfg.run_id,
         "timestamp": datetime.now().isoformat(),
         "model_name": cfg.model_name,
         "behavior_name": cfg.behavior_name,
@@ -410,12 +428,99 @@ def run_artifact_capture(cfg: SteeringArtifactConfig) -> dict[str, Any]:
         print(f"SAE features were not saved: {sae_status['reason']}")
 
     final_summary = {
-        "run_id": run_id,
+        "run_id": cfg.run_id,
         "output_dir": str(run_root),
         "metadata": str(metadata_path),
         "prompt_summary": str(prompt_summary_path),
         "feature_summary": str(feature_summary_path),
         "sae_status": sae_status,
+    }
+    print(json.dumps(final_summary, indent=2))
+    return final_summary
+
+
+def run_artifact_capture(cfg: SteeringArtifactConfig) -> dict[str, Any]:
+    configure_determinism(cfg.seed)
+    device = get_device()
+    run_id = cfg.run_id or _make_run_id()
+    read_layers = cfg.read_layers or (cfg.read_layer,)
+    alpha_values = cfg.alpha_values or (cfg.alpha,)
+    run_root = Path(cfg.out_dir) / _clean_model_name(cfg.model_name) / cfg.behavior_name / run_id
+    run_root.mkdir(parents=True, exist_ok=True)
+
+    model = HFCausalLM(cfg.model_name, device)
+
+    train_pairs = load_train_dataset(cfg.behavior_name)[: cfg.max_train_prompts]
+    eval_prompts = load_test_dataset(cfg.behavior_name)[: cfg.max_eval_prompts]
+    if not train_pairs:
+        raise ValueError(f"No training prompts found for behavior {cfg.behavior_name!r}")
+    if not eval_prompts:
+        raise ValueError(f"No eval prompts found for behavior {cfg.behavior_name!r}")
+
+    steer_vec, vector_status, vector_cache_path = _build_hf_steering_vector(
+        model=model,
+        source_layer=cfg.source_layer,
+        prompt_pairs=train_pairs,
+        prepend_bos=cfg.prepend_bos,
+        model_name=cfg.model_name,
+        behavior_name=cfg.behavior_name,
+    )
+
+    layer_summaries = []
+    for read_layer in read_layers:
+        sae_id = cfg.sae_id
+        if len(read_layers) > 1:
+            sae_id = _default_sae_id_for_read_layer(read_layer)
+        for alpha in alpha_values:
+            layer_cfg = replace(
+                cfg,
+                read_layer=read_layer,
+                alpha=alpha,
+                sae_id=sae_id,
+                read_layers=tuple(),
+                alpha_values=tuple(),
+                run_id=run_id,
+            )
+            needs_nested_dirs = len(read_layers) > 1 or len(alpha_values) > 1
+            layer_root = run_root
+            if needs_nested_dirs:
+                layer_root = run_root / _layer_run_label(cfg.source_layer, read_layer) / _alpha_run_label(alpha)
+            layer_summaries.append(
+                _capture_single_read_layer(
+                    cfg=layer_cfg,
+                    model=model,
+                    device=device,
+                    run_root=layer_root,
+                    steer_vec=steer_vec,
+                    vector_status=vector_status,
+                    vector_cache_path=vector_cache_path,
+                    eval_prompts=eval_prompts,
+                )
+            )
+
+    top_metadata = {
+        "run_id": run_id,
+        "timestamp": datetime.now().isoformat(),
+        "model_name": cfg.model_name,
+        "behavior_name": cfg.behavior_name,
+        "source_layer": cfg.source_layer,
+        "read_layers": list(read_layers),
+        "alpha_values": list(alpha_values),
+        "vector_status": vector_status,
+        "vector_cache_path": vector_cache_path,
+        "run_settings": asdict(cfg),
+        "layer_summaries": layer_summaries,
+    }
+    top_metadata_path = run_root / "metadata.json"
+    top_metadata_path.write_text(json.dumps(top_metadata, indent=2), encoding="utf-8")
+
+    final_summary = {
+        "run_id": run_id,
+        "output_dir": str(run_root),
+        "metadata": str(top_metadata_path),
+        "read_layers": list(read_layers),
+        "alpha_values": list(alpha_values),
+        "layer_summaries": layer_summaries,
     }
     print(json.dumps(final_summary, indent=2))
     return final_summary
@@ -427,7 +532,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--behavior-name", "--behavior", default="reassurance")
     parser.add_argument("--source-layer", type=int, default=8)
     parser.add_argument("--read-layer", type=int, default=16)
+    parser.add_argument("--read-layers", default="", help='Comma-separated read layers, for example "12,16,20".')
     parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument(
+        "--alpha-values",
+        default=",".join(str(value).removesuffix(".0") for value in DEFAULT_ALPHA_VALUES),
+        help='Comma-separated alpha values, for example "-10,-7.5,-5,-2.5,0,2.5,5,7.5,10".',
+    )
     parser.add_argument("--max-train-prompts", type=int, default=40)
     parser.add_argument("--max-eval-prompts", "--num-prompts", type=int, default=5)
     parser.add_argument("--out-dir", default="steering_runs")
@@ -459,6 +570,8 @@ def main(argv: list[str] | None = None) -> None:
         run_id=args.run_id,
         sae_release=args.sae_release,
         sae_id=args.sae_id,
+        read_layers=_parse_int_list(args.read_layers),
+        alpha_values=_parse_float_list(args.alpha_values),
     )
     run_artifact_capture(cfg)
 
