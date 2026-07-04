@@ -17,6 +17,7 @@ jaxtyping>=0.2.33,<0.3
 typeguard>=2.13,<3
 
 pandas>=2.2,<3
+streamlit>=1.40,<2
 tqdm>=4.66,<5
 
 pytest>=8,<9

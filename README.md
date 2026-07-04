@@ -128,7 +128,7 @@ python -m BRC_Experiment.Modularized.cli \
 - Determinism is best-effort due to CUDA/BLAS constraints.
 
 ## Modal
-You can run the experiment on Modal using the provided [`modal_brc.py`](/Users/sinanak/Desktop/CBMAS/modal_brc.py) entrypoint:
+You can run the experiment on Modal using the provided [`modal_brc.py`](modal_brc.py) entrypoint:
 ```bash
 modal setup
 modal run modal_brc.py --dataset reassurance --metric logit_diffs --inject-layers 0 --read-layers 1
@@ -234,6 +234,16 @@ modal run modal_steering_artifacts.py \
   --sae-release gemma-scope-2b-pt-res-canonical
 ```
 
+After downloading a completed run from the Modal volume, summarize the SAE feature changes locally:
+```bash
+modal volume get cbmas-steering-artifacts google_gemma-2-2b/reassurance/<run_id> ./steering_run
+
+python -m experiments.analyze_sae_artifacts \
+  --run-dir ./steering_run
+```
+
+The analyzer writes `comparison_summary.csv`, `recurring_top_features.csv`, `global_recurring_features.csv`, and comparison plots under `./steering_run/analysis/`.
+
 ## Testing
 A pytest suite can be created to mock heavy dependencies. Example categories:
 - utils: seeds, device, alpha grid, layer parsing
@@ -246,3 +256,23 @@ A pytest suite can be created to mock heavy dependencies. Example categories:
 
 ## License
 CC-BY 4.0
+# SAE feature inspection panel
+
+After downloading a steering artifact run and generating its `analysis/` CSVs,
+launch the local inspection panel with:
+
+```bash
+conda activate cbmas
+streamlit run dashboard/sae_inspector.py
+```
+
+The panel defaults to `2026-06-22_07-29-08_789c`. To inspect another run, paste
+its local directory into the sidebar or set it before launch:
+
+```bash
+CBMAS_SAE_RUN_DIR=/path/to/run streamlit run dashboard/sae_inspector.py
+```
+
+The dashboard reads local artifacts only. It filters features by read layer,
+alpha, and prompt, shows signed/absolute activation deltas, and links each
+Gemma Scope residual feature to its Neuronpedia page.

@@ -1,5 +1,11 @@
 .venv/
 .vscode/
+.DS_Store
 __pycache__/
 *.py[cod]
 *.pyd
+
+# Local and downloaded experiment artifacts
+/steering_runs/
+/steering_run_*/
+/20??-??-??_??-??-??_*/
